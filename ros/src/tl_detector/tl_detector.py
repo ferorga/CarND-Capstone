@@ -58,11 +58,11 @@ class TLDetector(object):
         self.pose = msg
 
     def waypoints_cb(self, waypoints):
-        self.base_waypoints = waypoints
+	self.waypoints = waypoints
 	if not self.waypoints_2d:
-		self.waypoints_2d = [[waypoint.pose.pose.position.x, waypoint.pose.pose.position.y] for waypoint in waypoints.waypoints]
-		self.waypoint_tree = KDTree(self.waypoints_2d)
-
+	    self.waypoints_2d = [[waypoint.pose.pose.position.x, waypoint.pose.pose.position.y] for waypoint in waypoints.waypoints]
+	    self.waypoint_tree = KDTree(self.waypoints_2d)
+	
     def traffic_cb(self, msg):
         self.lights = msg.lights
 
@@ -148,7 +148,11 @@ class TLDetector(object):
             car_wp_idx = self.get_closest_waypoint(self.pose.pose.position.x, self.pose.pose.position.y)
 
         #TODO find the closest visible traffic light (if one exists)
-	diff = len(self.waypoints.waypoints)
+        
+	diff = 0
+	if self.waypoints.waypoints is not None:
+	    diff = len(self.waypoints.waypoints)
+	
 	for i, light in enumerate(self.lights):
 	    line = stop_line_positions[i]
 	    temp_wp_idx = self.get_closest_waypoint(line[0], line[1])
@@ -160,7 +164,7 @@ class TLDetector(object):
 
         if closest_light:
             state = self.get_light_state(closest_light)
-            return light_wp, state
+            return line_wp_idx, state
             
         return -1, TrafficLight.UNKNOWN
 

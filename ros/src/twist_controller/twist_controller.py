@@ -1,4 +1,7 @@
 import rospy
+from yaw_controller import YawController
+from pid import PID
+from lowpass import LowPassFilter
 
 GAS_DENSITY = 2.858
 ONE_MPH = 0.44704
@@ -23,7 +26,7 @@ class Controller(object):
         
         self.vehicle_mass = vehicle_mass
         self.fuel_capacity = fuel_capacity
-        self.brake_deadband = break_deadband
+        self.brake_deadband = brake_deadband
         self.decel_limit = decel_limit
         self.accel_limit = accel_limit
         self.wheel_radius = wheel_radius
