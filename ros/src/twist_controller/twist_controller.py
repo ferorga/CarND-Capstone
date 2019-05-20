@@ -34,7 +34,7 @@ class Controller(object):
         
         self.last_time = rospy.get_time()
 
-    def control(self, current_vel, dbw_enabled, linear_vel, angular_vel):
+    def control(self, current_vel, dbw_enabled, linear_vel, angular_vel, cross_track_error, sample_time):
         # TODO: Change the arg, kwarg list to suit your needs
         # Return throttle, brake, steer
         if not dbw_enabled:
@@ -49,25 +49,18 @@ class Controller(object):
         # rospy.logwarn("Current velocity: {0}".format(current_vel))
         # rospy.logwarn("Filtered velocity: {0}".format(self.vel_lpf.get()))
         
-        steering = self.yaw_controller.get_steering(linear_vel, angular_vel, current_vel)
-        
+        predictive_steering = self.yaw_controller.get_steering(linear_vel, angular_vel, current_vel)
+        # without Steering PID car will wiggle around the waypoint path
+        corrective_steering = self.steering_pid.step(cross_track_error, sample_time)
+        steering = predictive_steering + corrective_steering
+
         vel_error = linear_vel - current_vel
-        self.last_vel = current_vel
-        
-        current_time = rospy.get_time()
-        sample_time = current_time - self.last_time
-        self.last_time = current_time
-        
         throttle = self.throttle_controller.step(vel_error, sample_time)
         brake = 0
         
-        if linear_vel == 0. and current_vel < 0.1:
+        if(throttle < 0):
+            deceleration = abs(throttle)
+            brake = (self.vehicle_mass + self.fuel_capacity * GAS_DENSITY) * self.wheel_radius * deceleration if deceleration > self.brake_deadband else 0.
             throttle = 0
-            brake = 400 # N*m - to hold the car in place if we are stopped at a light. Acceleratoin ~ 1 m/s**2
-            
-        elif throttle < .1 and vel_error < 0:
-            throttle = 0
-            decel = max(vel_error, self.decel_limit)
-            brake = abs(decel)*self.vehicle_mass*self.wheel_radius # Torque N*m
             
         return throttle, brake, steering

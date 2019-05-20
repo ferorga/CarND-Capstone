@@ -1,9 +1,10 @@
 #!/usr/bin/env python
-
+from geometry_msgs.msg import PoseStamped
 import rospy
 from std_msgs.msg import Bool
 from dbw_mkz_msgs.msg import ThrottleCmd, SteeringCmd, BrakeCmd, SteeringReport
 from geometry_msgs.msg import TwistStamped
+from styx_msgs.msg import Lane
 import math
 
 from twist_controller import Controller
@@ -69,6 +70,8 @@ class DBWNode(object):
         rospy.Subscriber('/vehicle/dbw_enabled', Bool, self.dbw_enabled_cb)
         rospy.Subscriber('/twist_cmd', TwistStamped, self.twist_cb)
         rospy.Subscriber('/current_velocity', TwistStamped, self.velocity_cb)
+        rospy.Subscriber('final_waypoints', Lane, self.final_waypoints_cb, queue_size=1)
+        rospy.Subscriber('/current_pose', PoseStamped, self.current_pose_cb, queue_size=1)
         
         self.current_vel = None
         self.curr_ang_vel = None
@@ -76,6 +79,9 @@ class DBWNode(object):
         self.linear_vel = None
         self.angular_vel = None
         self.throttle = self.steering = self.brake = 0
+        self.proposed_velocity = None
+        self.final_waypoints = None
+        self.current_pose = None
 
         self.loop()
 
@@ -84,13 +90,27 @@ class DBWNode(object):
         while not rospy.is_shutdown():
             # TODO: Get predicted throttle, brake, and steering using `twist_controller`
             # You should only publish the control commands if dbw is enabled
-            if not None in (self.current_vel, self.linear_vel, self.angular_vel):
-                self.throttle, self.brake, self.steering = self.controller.control(self.current_vel,
-                                                                                  self.dbw_enabled,
-                                                                                  self.linear_vel,
-                                                                                  self.angular_vel)
-            if self.dbw_enabled:
-                self.publish(self.throttle, self.brake, self.steering)
+            if not None in (self.current_vel, self.linear_vel, self.angular_vel, self.proposed_velocity):
+                current_time = rospy.get_rostime()
+                ros_duration = current_time - self.previous_loop_time
+                duration_in_seconds = ros_duration.secs + (1e-9 * ros_duration.nsecs)
+                self.previous_loop_time = current_time
+
+                current_linear_velocity = self.current_vel.twist.linear.x
+                target_linear_velocity = self.proposed_velocity.twist.linear.x
+
+                target_angular_velocity = self.proposed_velocity.twist.angular.z
+                cross_track_error = self.get_cross_track_error(self.final_waypoints, self.current_pose)
+
+                self.throttle, self.brake, self.steering = self.controller.control(target_linear_velocity,
+                                                                    target_angular_velocity,
+                                                                    current_linear_velocity, cross_track_error, duration_in_seconds)
+
+                if not self.is_dbw_enabled or abs(self.current_velocity.twist.linear.x) < 1e-5 and abs(self.proposed_velocity.twist.linear.x) < 1e-5:
+                   self.controller.reset()
+
+                if self.dbw_enabled:
+                    self.publish(self.throttle, self.brake, self.steering)
             rate.sleep()
             
     def dbw_enabled_cb(self, msg):
@@ -102,6 +122,12 @@ class DBWNode(object):
         
     def velocity_cb(self, msg):
         self.current_vel = msg.twist.linear.x
+
+    def final_waypoints_cb(self, message):
+        self.final_waypoints = message.waypoints
+
+    def current_pose_cb(self, message):
+        self.current_pose = message
 
     def publish(self, throttle, brake, steer):
         tcmd = ThrottleCmd()
@@ -120,6 +146,43 @@ class DBWNode(object):
         bcmd.pedal_cmd_type = BrakeCmd.CMD_TORQUE
         bcmd.pedal_cmd = brake
         self.brake_pub.publish(bcmd)
+
+    def get_cross_track_error(self,final_waypoints, current_pose):
+        origin = final_waypoints[0].pose.pose.position
+
+        waypoints_matrix = self.get_xy_from_waypoints(final_waypoints)
+
+        # Convert the coordinates [x,y] in the world view to the car's coordinate
+
+        # Shift the points to the origin
+        shifted_matrix = waypoints_matrix - np.array([origin.x, origin.y])
+
+        # Derive an angle by which to rotate the points
+        offset = 11
+        angle = np.arctan2(shifted_matrix[offset, 1], shifted_matrix[offset, 0])
+        rotation_matrix = np.array([
+                [np.cos(angle), -np.sin(angle)],
+                [np.sin(angle), np.cos(angle)]
+            ])
+
+        rotated_matrix = np.dot(shifted_matrix, rotation_matrix)
+
+        # Fit a 2 degree polynomial to the waypoints
+        degree = 2
+        coefficients = np.polyfit(rotated_matrix[:, 0], rotated_matrix[:, 1], degree)
+
+        # Transform the current pose of the car to be in the car's coordinate system
+        shifted_pose = np.array([current_pose.pose.position.x - origin.x, current_pose.pose.position.y - origin.y])
+        rotated_pose = np.dot(shifted_pose, rotation_matrix)
+
+        expected_y_value = np.polyval(coefficients, rotated_pose[0])
+        actual_y_value = rotated_pose[1]
+
+        return expected_y_value - actual_y_value
+
+    def get_xy_from_waypoints(self,waypoints):
+        return list(map(lambda waypoint: [waypoint.pose.pose.position.x, waypoint.pose.pose.position.y], waypoints))
+
 
 
 if __name__ == '__main__':
