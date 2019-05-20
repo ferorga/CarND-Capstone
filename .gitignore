@@ -4,3 +4,15 @@ build
 devel
 
 profile.tmp
+
+ros/src/\.idea/dictionaries/forte\.xml
+
+ros/src/\.idea/misc\.xml
+
+ros/src/\.idea/modules\.xml
+
+ros/src/\.idea/src\.iml
+
+ros/src/\.idea/vcs\.xml
+
+ros/src/\.idea/workspace\.xml

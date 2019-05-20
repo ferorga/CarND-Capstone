@@ -27,10 +27,7 @@ class WaypointUpdater(object):
     def __init__(self):
         rospy.init_node('waypoint_updater')
 
-
-
         self.final_waypoints_pub = rospy.Publisher('final_waypoints', Lane, queue_size=1)
-
 
         # Attribute initialization
         self.pose = None
@@ -45,7 +42,6 @@ class WaypointUpdater(object):
         rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb)
         rospy.Subscriber('/traffic_waypoint', Int32, self.traffic_cb)
         self.final_waypoints_pub = rospy.Publisher('final_waypoints', Lane, queue_size=1)
-
 
         self.loop()
 

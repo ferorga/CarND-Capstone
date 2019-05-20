@@ -52,17 +52,19 @@ class TLDetector(object):
         self.last_wp = -1
         self.state_count = 0
 
+        self.has_image = False
+
         rospy.spin()
 
     def pose_cb(self, msg):
         self.pose = msg
 
     def waypoints_cb(self, waypoints):
-	self.waypoints = waypoints
-	if not self.waypoints_2d:
-	    self.waypoints_2d = [[waypoint.pose.pose.position.x, waypoint.pose.pose.position.y] for waypoint in waypoints.waypoints]
-	    self.waypoint_tree = KDTree(self.waypoints_2d)
-	
+        self.waypoints = waypoints
+        if not self.waypoints_2d:
+            self.waypoints_2d = [[waypoint.pose.pose.position.x, waypoint.pose.pose.position.y] for waypoint in waypoints.waypoints]
+            self.waypoint_tree = KDTree(self.waypoints_2d)
+
     def traffic_cb(self, msg):
         self.lights = msg.lights
 
@@ -121,7 +123,7 @@ class TLDetector(object):
         """
         return light.state
         
-        if(not self.has_image):
+        if not self.has_image:
             self.prev_light_loc = None
             return False
 
@@ -144,7 +146,7 @@ class TLDetector(object):
 
         # List of positions that correspond to the line to stop in front of for a given intersection
         stop_line_positions = self.config['stop_line_positions']
-        if(self.pose):
+        if self.pose:
             car_wp_idx = self.get_closest_waypoint(self.pose.pose.position.x, self.pose.pose.position.y)
 
         #TODO find the closest visible traffic light (if one exists)
